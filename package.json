@@ -1,0 +1,19 @@
+{
+  "name": "online-3d-soccer",
+  "version": "1.0.0",
+  "description": "실시간 온라인 3D 축구 게임",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["websocket", "3d", "soccer", "multiplayer"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.13.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
