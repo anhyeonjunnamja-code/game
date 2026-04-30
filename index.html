@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🎮 Online 3D Soccer - 온라인 축구 게임</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: "Arial", sans-serif;
+      overflow: hidden;
+      background: #1a1a1a;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    #hud {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.7);
+      color: #00ff00;
+      padding: 15px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-family: "Courier New", monospace;
+      max-width: 300px;
+      border: 2px solid #00ff00;
+    }
+
+    #hud h3 {
+      margin-bottom: 10px;
+      color: #00ff00;
+      font-size: 14px;
+    }
+
+    #hud p {
+      margin: 3px 0;
+      line-height: 1.4;
+    }
+
+    .stat-label {
+      color: #ffff00;
+      display: inline-block;
+      width: 80px;
+    }
+
+    #players-list {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      padding: 15px;
+      border-radius: 8px;
+      font-size: 12px;
+      border: 2px solid #0099ff;
+      max-width: 250px;
+    }
+
+    #players-list h3 {
+      margin-bottom: 10px;
+      color: #0099ff;
+    }
+
+    .player-item {
+      margin: 5px 0;
+      padding: 3px 5px;
+      border-radius: 3px;
+    }
+
+    .team-0 {
+      background: rgba(0, 100, 255, 0.3);
+      border-left: 3px solid #0064ff;
+    }
+
+    .team-1 {
+      background: rgba(255, 50, 50, 0.3);
+      border-left: 3px solid #ff3232;
+    }
+
+    #controls {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      border: 2px solid #666;
+      width: 250px;
+    }
+
+    #controls h4 {
+      margin-bottom: 8px;
+      color: #ffff00;
+    }
+
+    #controls p {
+      margin: 3px 0;
+      line-height: 1.3;
+    }
+
+    .key {
+      background: #333;
+      padding: 2px 6px;
+      border-radius: 3px;
+      color: #0f0;
+      font-weight: bold;
+    }
+
+    #connection-status {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 8px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    .connected {
+      background: #00aa00;
+      color: white;
+    }
+
+    .disconnected {
+      background: #aa0000;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <div id="connection-status" class="disconnected">⚫ 연결 중...</div>
+  
+  <div id="hud">
+    <h3>📊 게임 정보</h3>
+    <p><span class="stat-label">내 위치:</span> <span id="pos-x">0</span>, <span id="pos-z">0</span></p>
+    <p><span class="stat-label">공 위치:</span> <span id="ball-x">0</span>, <span id="ball-z">0</span></p>
+    <p><span class="stat-label">공 높이:</span> <span id="ball-y">0</span></p>
+    <p><span class="stat-label">플레이어:</span> <span id="player-count">0</span>명</p>
+    <p><span class="stat-label">지연:</span> <span id="ping">0</span>ms</p>
+  </div>
+
+  <div id="players-list">
+    <h3>👥 플레이어 목록</h3>
+    <div id="players-container"></div>
+  </div>
+
+  <div id="controls">
+    <h4>⌨️ 조작 방법</h4>
+    <p><span class="key">W</span> <span class="key">A</span> <span class="key">S</span> <span class="key">D</span> - 이동</p>
+    <p><span class="key">SPACE</span> - 킥</p>
+    <p><span class="key">마우스 드래그</span> - 카메라 회전</p>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    // ===== Three.js 설정 =====
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb);
+    scene.fog = new THREE.Fog(0x87ceeb, 100, 200);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 5, 10);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFShadowShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    // ===== 조명 =====
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(50, 50, 50);
+    directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.width = 2048;
+    directionalLight.shadow.mapSize.height = 2048;
+    directionalLight.shadow.camera.left = -100;
+    directionalLight.shadow.camera.right = 100;
+    directionalLight.shadow.camera.top = 100;
+    directionalLight.shadow.camera.bottom = -100;
+    scene.add(directionalLight);
+
+    // ===== 필드 =====
+    const fieldGeometry = new THREE.PlaneGeometry(50, 30);
+    const fieldMaterial = new THREE.MeshLambertMaterial({ color: 0x00aa00 });
+    const field = new THREE.Mesh(fieldGeometry, fieldMaterial);
+    field.rotation.x = -Math.PI / 2;
+    field.receiveShadow = true;
+    scene.add(field);
+
+    // 필드 경계선
+    const edgeGeometry = new THREE.EdgesGeometry(fieldGeometry);
+    const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 3 });
+    const fieldOutline = new THREE.LineSegments(edgeGeometry, lineMaterial);
+    fieldOutline.rotation.x = -Math.PI / 2;
+    fieldOutline.position.y = 0.01;
+    scene.add(fieldOutline);
+
+    // 중앙선
+    const centerLineGeometry = new THREE.BufferGeometry();
+    const centerLinePositions = new Float32Array([
+      0, 0.01, -15,
+      0, 0.01, 15
+    ]);
+    centerLineGeometry.setAttribute('position', new THREE.BufferAttribute(centerLinePositions, 3));
+    const centerLine = new THREE.Line(centerLineGeometry, lineMaterial);
+    scene.add(centerLine);
+
+    // 중앙원
+    const circleGeometry = new THREE.BufferGeometry();
+    const circlePoints = [];
+    for (let i = 0; i <= 32; i++) {
+      const angle = (i / 32) * Math.PI * 2;
+      circlePoints.push(new THREE.Vector3(Math.cos(angle) * 5, 0.01, Math.sin(angle) * 5));
+    }
+    circleGeometry.setFromPoints(circlePoints);
+    const circle = new THREE.Line(circleGeometry, lineMaterial);
+    scene.add(circle);
+
+    // ===== 게임 객체 =====
+    const playersGroup = new THREE.Group();
+    scene.add(playersGroup);
+
+    // 내 플레이어
+    let myPlayer = null;
+    let myTeam = 0;
+
+    // 공
+    const ballGeometry = new THREE.SphereGeometry(0.5, 32, 32);
+    const ballMaterial = new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 100 });
+    const ball = new THREE.Mesh(ballGeometry, ballMaterial);
+    ball.castShadow = true;
+    ball.receiveShadow = true;
+    scene.add(ball);
+
+    const ballShadow = new THREE.Mesh(
+      new THREE.CircleGeometry(0.5, 32),
+      new THREE.ShadowMaterial({ opacity: 0.4 })
+    );
+    ballShadow.rotation.x = -Math.PI / 2;
+    ballShadow.position.y = 0.01;
+    scene.add(ballShadow);
+
+    // ===== WebSocket 연결 =====
+    const socket = new WebSocket(`ws://${window.location.hostname}:3000`);
+    let ping = 0;
+    let lastPingTime = 0;
+
+    socket.onopen = () => {
+      console.log("✅ 서버와 연결되었습니다");
+      document.getElementById("connection-status").textContent = "🟢 연결됨";
+      document.getElementById("connection-status").classList.add("connected");
+      document.getElementById("connection-status").classList.remove("disconnected");
+    };
+
+    socket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      if (data.type === "gameState") {
+        ping = Date.now() - lastPingTime;
+        document.getElementById("ping").textContent = ping;
+
+        // 플레이어 업데이트
+        updatePlayers(data.players);
+
+        // 공 업데이트
+        ball.position.set(data.ball.x, data.ball.y, data.ball.z);
+        ballShadow.position.set(data.ball.x, 0.01, data.ball.z);
+
+        // 내 위치 업데이트
+        if (myPlayer) {
+          document.getElementById("pos-x").textContent = myPlayer.position.x.toFixed(1);
+          document.getElementById("pos-z").textContent = myPlayer.position.z.toFixed(1);
+        }
+
+        // 공 위치 정보
+        document.getElementById("ball-x").textContent = data.ball.x.toFixed(1);
+        document.getElementById("ball-z").textContent = data.ball.z.toFixed(1);
+        document.getElementById("ball-y").textContent = data.ball.y.toFixed(1);
+
+        // 플레이어 수
+        document.getElementById("player-count").textContent = data.players.length;
+      }
+    };
+
+    socket.onclose = () => {
+      console.log("❌ 서버와 연결이 끊어졌습니다");
+      document.getElementById("connection-status").textContent = "🔴 연결 끊김";
+      document.getElementById("connection-status").classList.remove("connected");
+      document.getElementById("connection-status").classList.add("disconnected");
+    };
+
+    socket.onerror = (error) => {
+      console.error("⚠️ 연결 오류:", error);
+    };
+
+    // ===== 플레이어 업데이트 =====
+    const playersMap = new Map();
+
+    function updatePlayers(players) {
+      // 기존 플레이어 확인
+      const activeIds = new Set(players.map(p => p.id));
+
+      for (const [id, mesh] of playersMap) {
+        if (!activeIds.has(id)) {
+          playersGroup.remove(mesh);
+          playersMap.delete(id);
+        }
+      }
+
+      // 플레이어 생성 또는 업데이트
+      for (const playerData of players) {
+        let playerMesh = playersMap.get(playerData.id);
+
+        if (!playerMesh) {
+          const color = playerData.team === 0 ? 0x0064ff : 0xff3232;
+          const geometry = new THREE.BoxGeometry(1, 2, 1);
+          const material = new THREE.MeshPhongMaterial({ color });
+          playerMesh = new THREE.Mesh(geometry, material);
+          playerMesh.castShadow = true;
+          playerMesh.receiveShadow = true;
+          playersGroup.add(playerMesh);
+          playersMap.set(playerData.id, playerMesh);
+
+          // 내 플레이어 저장
+          if (!myPlayer || myPlayer.position.x === 0) {
+            myPlayer = playerMesh;
+            myTeam = playerData.team;
+          }
+        }
+
+        // 위치 업데이트
+        playerMesh.position.set(playerData.x, 1, playerData.z);
+      }
+
+      // 플레이어 목록 업데이트
+      updatePlayersList(players);
+    }
+
+    function updatePlayersList(players) {
+      const container = document.getElementById("players-container");
+      container.innerHTML = "";
+
+      for (const player of players) {
+        const div = document.createElement("div");
+        div.className = `player-item team-${player.team}`;
+        div.textContent = `플레이어 #${player.id} (팀 ${player.team === 0 ? "🔵" : "🔴"})`;
+        container.appendChild(div);
+      }
+    }
+
+    // ===== 카메라 제어 =====
+    let cameraRotationX = 0;
+    let cameraRotationY = 0;
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+
+    document.addEventListener("mousedown", (e) => {
+      isDragging = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+    });
+
+    document.addEventListener("mousemove", (e) => {
+      if (isDragging) {
+        const deltaX = e.clientX - dragStartX;
+        const deltaY = e.clientY - dragStartY;
+
+        cameraRotationY += deltaX * 0.005;
+        cameraRotationX += deltaY * 0.005;
+
+        // 수직 회전 제한
+        cameraRotationX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, cameraRotationX));
+
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+      }
+    });
+
+    document.addEventListener("mouseup", () => {
+      isDragging = false;
+    });
+
+    // ===== 입력 제어 =====
+    const keys = {};
+
+    document.addEventListener("keydown", (e) => {
+      keys[e.key.toUpperCase()] = true;
+
+      if (e.key === " ") {
+        e.preventDefault();
+        // 킥
+        socket.send(JSON.stringify({ type: "kick" }));
+      }
+    });
+
+    document.addEventListener("keyup", (e) => {
+      keys[e.key.toUpperCase()] = false;
+    });
+
+    // ===== 게임 루프 =====
+    let moveX = 0;
+    let moveZ = 0;
+    const moveSpeed = 0.3;
+
+    function update() {
+      if (myPlayer) {
+        // 이동 입력
+        moveX = 0;
+        moveZ = 0;
+
+        if (keys["W"]) moveZ -= moveSpeed;
+        if (keys["S"]) moveZ += moveSpeed;
+        if (keys["A"]) moveX -= moveSpeed;
+        if (keys["D"]) moveX += moveSpeed;
+
+        // 위치 업데이트
+        const newX = myPlayer.position.x + moveX;
+        const newZ = myPlayer.position.z + moveZ;
+
+        // 서버에 전송
+        if (moveX !== 0 || moveZ !== 0) {
+          lastPingTime = Date.now();
+          socket.send(JSON.stringify({
+            type: "move",
+            x: newX,
+            z: newZ
+          }));
+        }
+
+        // 카메라 업데이트
+        const cameraDistance = 10;
+        const cameraHeight = 5;
+
+        camera.position.x = myPlayer.position.x + Math.sin(cameraRotationY) * cameraDistance;
+        camera.position.y = myPlayer.position.y + cameraHeight + Math.sin(cameraRotationX) * cameraDistance;
+        camera.position.z = myPlayer.position.z + Math.cos(cameraRotationY) * cameraDistance;
+
+        camera.lookAt(
+          myPlayer.position.x,
+          myPlayer.position.y + 1,
+          myPlayer.position.z
+        );
+      }
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      update();
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    // ===== 창 크기 변경 대응 =====
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
